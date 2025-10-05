@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>教科書コーチ v4.2（安定＋語彙オート分割）</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>教科書コーチ v4.2（第5課）</h1>
+    <nav>
+      <button class="tab-btn active" data-tab="home" type="button">ホーム</button>
+      <button class="tab-btn" data-tab="shadow" type="button">シャドーウィング</button>
+      <button class="tab-btn" data-tab="vocab" type="button">語彙</button>
+      <button class="tab-btn" data-tab="grammar" type="button">文型ドリル</button>
+      <button class="tab-btn" data-tab="pron" type="button">発音</button>
+      <button class="tab-btn" data-tab="progress" type="button">学習履歴</button>
+      <button class="tab-btn" data-tab="autocut" type="button">語彙オート分割</button>
+    </nav>
+    <div id="status" class="note"></div>
+  </header>
+
+  <main>
+    <section id="home" class="tab active">
+      <h2>ホーム</h2>
+      <ul>
+        <li>このページひとつで、<b>シャドーウィング・語彙・文型・発音・履歴</b>ができます。</li>
+        <li>音声を配置：本文 <code>audio/lesson5_text.mp3</code>、語彙まとめ <code>audio/lesson_vocab_master.mp3</code></li>
+        <li>GitHub Pagesに対応。<code>data/vocab_cues.json</code> をリポジトリに入れると、語彙クリックで区間再生できます。</li>
+      </ul>
+    </section>
+
+    <section id="shadow" class="tab">
+      <h2>シャドーウィング</h2>
+      <div class="card">
+        <div class="row">
+          <button id="shadow-play" type="button">▶ 再生</button>
+          <button id="shadow-pause" type="button">⏸ 一時停止</button>
+          <label>速度: <input id="shadow-rate" type="range" min="0.7" max="1.3" step="0.05" value="1.00"></label>
+          <span id="shadow-ratev">1.00x</span>
+          <label><input id="shadow-loop" type="checkbox" checked> ループ</label>
+          <button id="shadow-pick" type="button">音声を選ぶ</button>
+        </div>
+        <audio id="shadow-aud" src="audio/lesson5_text.mp3" preload="auto" controls style="width:100%"></audio>
+        <div class="note">現在の音源: <code id="shadow-src">audio/lesson5_text.mp3</code></div>
+        <div class="shadow-text" id="shadow-text"></div>
+      </div>
+    </section>
+
+    <section id="vocab" class="tab">
+      <h2>語彙</h2>
+      <div class="card">
+        <div class="note">単語をクリックすると音声が再生されます（優先：個別MP3 → まとめ音声の区間）。</div>
+        <div id="vocab-list"></div>
+      </div>
+      <div class="card">
+        <h3>語彙クイズ（落ちゲー）</h3>
+        <label><input type="checkbox" id="easy"> やさしいモード</label>
+        <div id="fall-area"></div>
+        <div class="hud"><span>問題 <b id="round">0</b>/5</span><span>スコア <b id="score">0</b></span><span>残り <b id="time">0</b>s</span></div>
+        <button id="fall-start" type="button">開始</button>
+      </div>
+    </section>
+
+    <section id="grammar" class="tab">
+      <h2>文型ドリル</h2>
+      <div id="gram-free"></div>
+      <div class="card">
+        <h3>代替練習（スロット入力）</h3>
+        <div id="gram-sub"></div>
+      </div>
+    </section>
+
+    <section id="pron" class="tab">
+      <h2>発音フィードバック</h2>
+      <ol id="pron-list"></ol>
+      <div class="row">
+        <select id="pron-select"></select>
+        <button id="pron-start" type="button">🎙️録音開始</button>
+        <button id="pron-stop" type="button" disabled>■ 停止</button>
+      </div>
+      <div id="pron-out" class="note"></div>
+    </section>
+
+    <section id="progress" class="tab">
+      <h2>学習履歴</h2>
+      <div id="prog"></div>
+      <button id="prog-reset" type="button">リセット</button>
+    </section>
+
+    <section id="autocut" class="tab">
+      <h2>語彙オート分割（まとめ音声 → 単語区間）</h2>
+      <div class="card">
+        <p>ファイル：<code>audio/lesson_vocab_master.mp3</code> を読み込み → 自動で無音検出 → 語彙順に区間を仮割当。</p>
+        <div class="row">
+          <button id="ac-analyze" type="button">🔍 解析する</button>
+          <label>感度（無音しきい値）<input id="ac-th" type="range" min="0.0005" max="0.02" step="0.0005" value="0.005"></label>
+          <span id="ac-thv" class="note">0.005</span>
+          <label>最小間隔(ms) <input id="ac-gap" type="number" value="250" min="50" max="1500" step="50"></label>
+        </div>
+        <audio id="ac-aud" src="audio/lesson_vocab_master.mp3" controls preload="auto" style="width:100%"></audio>
+      </div>
+      <div class="card">
+        <h3>区間一覧（クリックで試聴・数値で微調整）</h3>
+        <div id="ac-list"></div>
+        <div class="row">
+          <button id="ac-save" type="button">💾 vocab_cues.json をダウンロード</button>
+          <input id="ac-import" type="file" accept="application/json">
+        </div>
+        <p class="note">GitHub Pages ではサーバ書き込みができないため、ダウンロードした <code>vocab_cues.json</code> を <code>/data</code> に入れてコミットしてください。</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
