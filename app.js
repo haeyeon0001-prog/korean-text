@@ -12,7 +12,7 @@ btns.forEach(b=>b.addEventListener('click', ()=>{
 
 const STATUS = document.getElementById('status');
 
-// ---- Lesson data (inline to avoid fetch errors) ----
+// ---- Lesson data ----
 let LESSON = {
   lesson: 5,
   title: "자기소개（自己紹介）",
@@ -30,16 +30,12 @@ let LESSON = {
   ],
   grammar: {
     items: [
-      {prompt:"① ‘저는 ~예요/이에요’ で「私は大学生です。」", pattern:/^저는\s*대학생(이에요|예요)\.$/, rationale:"‘대학생’は받침あり→‘이에요’が自然", hint:"저는 + 名詞 + 이에요/예요"},
-      {prompt:"② ‘이름이 뭐예요?’ に答える（さとうけん）", pattern:/^(제\s*이름은\s*사토\s*켄이에요\.|저는\s*사토\s*켄이에요\.)$/, rationale:"両方OK", hint:"제 이름은 ~/저는 ~"},
-      {prompt:"③ ‘어느 나라 사람이에요?’（日本人）", pattern:/^저는\s*일본\s*사람이에요\.$/, rationale:"固定表現", hint:"저 + 일본 사람 + 이에요."}
+      {prompt:"① 「私は大学生です。」", accept:[/^저는\s*대학생(이에요|예요)\.?$/i], rationale:"‘대학생’は받침あり→‘이에요’", hint:"저는 + 名詞 + 이에요/예요"},
+      {prompt:"② 「（さとうけん）です。」", accept:[/^제\s*이름은\s*사토\s*켄이에요\.?$/i,/^저는\s*사토\s*켄이에요\.?$/i], rationale:"両方OK", hint:"제 이름은 ~/저는 ~"},
+      {prompt:"③ 「私は日本人です。」", accept:[/^저는\s*일본\s*사람이에요\.?$/i], rationale:"固定表現", hint:"저 + 일본 사람 + 이에요."}
     ]
   },
-  substitution: [
-    {title:"① 저는 ~예요/이에요", template:"저는 {NOUN}{COP}.", slot:"NOUN", options:["학생","유학생","회사원","의사","가수"], copRule:true, hint:"받침→이에요 / 無し→예요"},
-    {title:"② {NAME} 씨は何人？", template:"{NAME} 씨는 어느 나라 사람이에요?", slot:"NAME", options:["유키","민수","지훈","사토 켄","다나카 유キ".replace("キ","키")]},
-    {title:"③ 私は〜人です", template:"저는 {COUNTRY} 사람이에요.", slot:"COUNTRY", options:["일본","한국","중국","미국","베트남"]}
-  ],
+  copulaNouns: ["학생","유학생","회사원","의사","가수","선생님","친구","사람","한국인","일본인","중국人","미국인","베트남인","직원","연구원"],
   pronTargets: [
     "저는 김민수예요.",
     "이름이 뭐예요?",
@@ -48,7 +44,7 @@ let LESSON = {
   shadowLines: [
     "민수: 안녕하세요?",
     "저는 김민수예요.",
-    "이름が 뭐예요?".replace("が","이"),
+    "이름이 뭐예요?",
     "유키: 안녕하세요?",
     "저는 다나카 유키예요.",
     "민수: 유키 씨는 일본 사람이에요?",
@@ -60,7 +56,32 @@ let LESSON = {
 let AUDIO_MAP = {}; // word -> filename
 let VOCAB_CUES = {meta:{src:"audio/lesson_vocab_master.mp3"}, cues:{}};
 
-// helper
+// ---- Utils ----
+function saveProg(delta){
+  const key = 'coach_v431_prog';
+  const p = JSON.parse(localStorage.getItem(key)||'{"voc":{"ok":0,"ng":0},"gram":{"ok":0,"ng":0},"cop":{"ok":0,"ng":0},"pron":{"ok":0,"ng":0},"last":""}');
+  function add(sec, ok){ p[sec][ ok? "ok":"ng" ] += 1; }
+  if(delta){ Object.entries(delta).forEach(([k,v])=>{ if(k==="last"){ p.last = v; } else add(k,v); }); }
+  p.last = new Date().toLocaleString();
+  localStorage.setItem(key, JSON.stringify(p));
+  renderProg();
+}
+function renderProg(){
+  const key = 'coach_v431_prog';
+  const p = JSON.parse(localStorage.getItem(key)||'{}');
+  const box = document.getElementById('prog');
+  if(!box) return;
+  box.innerHTML = p.last? `
+    <div>最終更新: <b>${p.last}</b></div>
+    <ul>
+      <li>語彙クイズ: ✔${p.voc?.ok||0} / ✘${p.voc?.ng||0}</li>
+      <li>文型（自由入力）: ✔${p.gram?.ok||0} / ✘${p.gram?.ng||0}</li>
+      <li>コピュラ練習: ✔${p.cop?.ok||0} / ✘${p.cop?.ng||0}</li>
+      <li>発音: ✔${p.pron?.ok||0} / ✘${p.pron?.ng||0}</li>
+    </ul>` : "<div class='note'>まだ記録はありません。</div>";
+}
+document.getElementById('prog-reset').addEventListener('click', ()=>{ localStorage.removeItem('coach_v431_prog'); renderProg(); });
+
 function hasBatchim(word){
   if(!word) return false;
   const ch = word.trim().slice(-1).charCodeAt(0);
@@ -76,11 +97,9 @@ function chooseCopula(noun){ return hasBatchim(noun) ? "이에요" : "예요"; }
   const src = document.getElementById('shadow-src');
   const text = document.getElementById('shadow-text');
   text.innerHTML = LESSON.shadowLines.map(l=>`<div>${l}</div>`).join('');
-
   document.getElementById('shadow-loop').addEventListener('change', e=> aud.loop = e.target.checked);
   const rate = document.getElementById('shadow-rate'); const rv = document.getElementById('shadow-ratev');
   rate.addEventListener('input', ()=>{ aud.playbackRate = parseFloat(rate.value); rv.textContent = aud.playbackRate.toFixed(2)+"x"; });
-
   document.getElementById('shadow-play').addEventListener('click', async ()=>{
     try{ await aud.play(); }catch(err){ alert("再生できません。audio/lesson5_text.mp3 を配置するか、『音声を選ぶ』をご利用ください。\\n"+err); }
   });
@@ -119,21 +138,21 @@ function playWordAudio(word){
   box.addEventListener('click', e=>{
     const ko = e.target.closest('.ko'); if(!ko) return;
     const word = LESSON.vocab[Number(ko.dataset.i)].ko;
-    if(!playWordAudio(word)){ alert("音声未登録："+word+"\\n→ data/vocab_cues.json（自動作成可）または data/audio_map.json を設定してください。"); }
+    if(!playWordAudio(word)){ alert("音声未登録："+word+"\\n→ data/vocab_cues.json か data/audio_map.json を設定してください。"); }
   });
-
-  // Try to fetch cue/map if exists (works on GitHub Pages)
+  // try fetch cue/map
   fetch('data/vocab_cues.json', {cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{ if(j){ VOCAB_CUES=j; } }).catch(()=>{});
   fetch('data/audio_map.json', {cache:'no-store'}).then(r=>r.ok?r.json():null).then(j=>{ if(j){ AUDIO_MAP=j; } }).catch(()=>{});
 })();
 
-// ---- Vocab Quiz (falling) ----
+// ---- Vocab Quiz (prompt & ko-only chips) ----
 (function(){
   const area = document.getElementById('fall-area');
   const easy = document.getElementById('easy');
   const rEl = document.getElementById('round');
   const sEl = document.getElementById('score');
   const tEl = document.getElementById('time');
+  const pEl = document.getElementById('fall-prompt');
   const start = document.getElementById('fall-start');
 
   let round=0, score=0, running=false, answered=false, timer=null, remain=0;
@@ -145,76 +164,123 @@ function playWordAudio(word){
     rEl.textContent = round;
     const all = LESSON.vocab.slice();
     const target = all[Math.floor(Math.random()*all.length)];
+    // ★ 変更：お題は【日本語】で表示
+    pEl.textContent = `【${target.ja}】に合う韓国語をクリック`;
     const distract = pickN(all.filter(x=>x!==target), 3);
     const options = pickN([target,...distract],4);
     const width = area.clientWidth || 600;
     options.forEach(opt=>{
-      const el = document.createElement('div'); el.className='fall'; el.textContent=opt.ko;
-      el.style.left = (Math.floor(Math.random()*(width-120))+10)+'px';
+      const el = document.createElement('div'); el.className='fall';
+      el.textContent = opt.ko; // ★ 韓国語のみ表示
+      el.style.left = (Math.floor(Math.random()*(width-140))+10)+'px';
       const dur = (easy.checked? 8.5 : 6.0) + (Math.random()*1.5-0.5);
       el.style.setProperty('--dur', dur+'s');
       el.addEventListener('click', ()=>{
         if(answered) return; answered=true;
-        if(opt===target){ el.style.borderColor='#2a6'; el.style.background='#eafff2'; score+=10; playWordAudio(opt.ko); }
-        else{ el.style.borderColor='#c33'; el.style.background='#ffecec'; score-=5; }
+        if(opt===target){ el.style.borderColor='#2a6'; el.style.background='#eafff2'; score+=10; playWordAudio(opt.ko); saveProg({"voc":true}); }
+        else{ el.style.borderColor='#c33'; el.style.background='#ffecec'; score-=5; saveProg({"voc":false}); }
         sEl.textContent=score; setTimeout(next, 600);
       });
       area.appendChild(el);
     });
     remain = easy.checked? 18: 10; tEl.textContent = remain;
     if(timer) clearInterval(timer);
-    timer = setInterval(()=>{ remain--; tEl.textContent = remain; if(remain<=0){ clearInterval(timer); if(!answered){ score-=5; sEl.textContent=score; setTimeout(next, 300);} } }, 1000);
+    timer = setInterval(()=>{ remain--; tEl.textContent = remain; if(remain<=0){ clearInterval(timer); if(!answered){ score-=5; sEl.textContent=score; saveProg({"voc":false}); setTimeout(next, 300);} } }, 1000);
   }
   start.addEventListener('click', ()=>{ if(running) return; score=0; sEl.textContent=score; round=0; rEl.textContent=round; start.disabled=true; next(); });
 })();
 
-// ---- Grammar Free Input & Substitution ----
+// ---- Grammar Free Input (same as 4.3) ----
 (function(){
-  // Free
+  function norm(s){ return (s||"").trim().replace(/\s+/g,' ').replace(/[．。]/g,'.'); }
   const box = document.getElementById('gram-free');
   box.innerHTML = "";
   LESSON.grammar.items.forEach((g,idx)=>{
     const div = document.createElement('div'); div.className='card';
     div.innerHTML = `<div>${idx+1}. ${g.prompt}</div>
-      <input type="text" id="gq${idx}" placeholder="入力してください。" style="width:16em">
+      <input type="text" id="gq${idx}" placeholder="入力してください。" style="width:20em">
       <button id="gb${idx}" type="button">答え合わせ</button>
       <div id="gr${idx}" class="note"></div>`;
     box.appendChild(div);
     document.getElementById('gb'+idx).addEventListener('click', ()=>{
-      const v = (document.getElementById('gq'+idx).value||'').trim();
-      const ok = g.pattern.test(v);
-      document.getElementById('gr'+idx).innerHTML = ok? `<span class="correct">✔ OK</span> ${g.rationale}`: `<span class="incorrect">✘ もう一度</span> ${g.hint}`;
-    });
-  });
-  // Substitution
-  const box2 = document.getElementById('gram-sub'); box2.innerHTML="";
-  LESSON.substitution.forEach((it,i)=>{
-    const div = document.createElement('div'); div.className='card';
-    const opts = it.options.map(o=>`<span class="badge">${o}</span>`).join(" ");
-    div.innerHTML = `<div><b>${it.title}</b></div>
-      <div class="note">選択肢：${opts}</div>
-      <div style="margin:6px 0">${it.template.replace("{"+it.slot+"}", `<input type="text" id="sub${i}" placeholder="${it.slot} を入力" style="width:14em">`).replace("{COP}", it.copRule? "(이에요/예요)": "")}</div>
-      <button id="subb${i}" type="button">答え合わせ</button>
-      <div id="subr${i}" class="note"></div>`;
-    box2.appendChild(div);
-    document.getElementById('subb'+i).addEventListener('click', ()=>{
-      const input = (document.getElementById('sub'+i).value||'').trim();
-      const ok = it.options.some(o=>o.replace(/\s+/g,' ').trim() === input.replace(/\s+/g,' ').trim());
-      const cop = it.copRule? chooseCopula(input): "";
-      const out = it.template.replace("{"+it.slot+"}", input).replace("{COP}", cop);
-      document.getElementById('subr'+i).innerHTML = ok? `<span class="correct">✔ 正解</span> → <b>${out}</b>` : `<span class="incorrect">✘ もう一度</span> 例：<b>${it.template.replace("{"+it.slot+"}", it.options[0]).replace("{COP}", it.copRule? chooseCopula(it.options[0]): "")}</b>`;
+      const v = norm(document.getElementById('gq'+idx).value||'');
+      const ok = g.accept.some(rx=> rx.test(v));
+      document.getElementById('gr'+idx).innerHTML = ok? `<span class="correct">✔ 正解</span> ${g.rationale}`: `<span class="incorrect">✘ もう一度</span> ${g.hint}`;
+      saveProg({"gram": ok});
     });
   });
 })();
 
-// ---- Pronunciation (simple SR + jamo/token hybrid) ----
+// ---- Copula Trainer & Blank Quiz ----
+(function(){
+  function hasBatchim(word){
+    const ch = word.trim().slice(-1).charCodeAt(0);
+    if(isNaN(ch) || ch < 0xAC00 || ch > 0xD7A3) return false;
+    const jong = (ch - 0xAC00) % 28;
+    return jong !== 0;
+  }
+  function chooseCopula(noun){ return hasBatchim(noun) ? "이에요" : "예요"; }
+  const nouns = ["학생","유학생","회사원","의사","가수","선생님","친구","사람","한국인","日本人".replace("日本人","일본인"),"중국인","미국인","베트남인","직원","연구원"];
+
+  const box = document.getElementById('copula');
+  function render(){
+    box.innerHTML = "";
+    for(let i=0;i<5;i++){
+      const n = nouns[Math.floor(Math.random()*nouns.length)];
+      const div = document.createElement('div'); div.className='card';
+      div.innerHTML = `(${i+1}) <b>${n}</b> → 「저는 ____」
+        <label><input type="radio" name="cp${i}" value="이에요">이에요</label>
+        <label><input type="radio" name="cp${i}" value="예요">예요</label>
+        <button id="cpb${i}" type="button">判定</button>
+        <div id="cpr${i}" class="note"></div>`;
+      box.appendChild(div);
+      document.getElementById('cpb'+i).addEventListener('click', ()=>{
+        const sel = (document.querySelector(`input[name="cp${i}"]:checked`)||{}).value;
+        const need = chooseCopula(n);
+        const ok = sel===need;
+        document.getElementById('cpr'+i).innerHTML = ok? `<span class="correct">✔ 正解</span> 「${n}」は${hasBatchim(n)?"子音終わり（받침あり）":"母音終わり（받침なし）"} → <b>${need}</b>` :
+          `<span class="incorrect">✘</span> 正しくは <b>${need}</b>（${hasBatchim(n)?"받침あり":"받침なし"}）`;
+        saveProg({"cop":ok});
+      });
+    }
+    const again = document.createElement('button'); again.textContent="➕ 5問追加"; again.addEventListener('click', render); box.appendChild(again);
+  }
+  render();
+
+  const box2 = document.getElementById('copula-quiz');
+  const words = nouns.slice(0,8);
+  words.forEach((w,i)=>{
+    const div = document.createElement('div'); div.className='card';
+    div.innerHTML = `(${i+1}) 저는 ${w}<input id="bq${i}" style="width:5em" placeholder="( )">.` +
+      `<button id="bqb${i}" type="button">判定</button> <span id="bqr${i}" class="note"></span>`;
+    box2.appendChild(div);
+    document.getElementById('bqb'+i).addEventListener('click', ()=>{
+      const val = (document.getElementById('bq'+i).value||'').trim();
+      const need = chooseCopula(w);
+      const ok = val===need;
+      document.getElementById('bqr'+i).innerHTML = ok? `<span class="correct">✔</span>` : `<span class="incorrect">✘</span> 正しくは <b>${need}</b>`;
+      saveProg({"cop":ok});
+    });
+  });
+})();
+
+// ---- Pronunciation (two modes) ----
 (function(){
   const list = document.getElementById('pron-list');
   const sel = document.getElementById('pron-select');
-  LESSON.pronTargets.forEach(t=>{ const li=document.createElement('li'); li.textContent=t; list.appendChild(li); const o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
+  const targets = [
+    "저는 김민수예요.",
+    "이름이 뭐예요?",
+    "저는 일본 사람이에요. 만나서 반가워요."
+  ];
+  targets.forEach(t=>{ const li=document.createElement('li'); li.textContent=t; list.appendChild(li); const o=document.createElement('option'); o.value=t; o.textContent=t; sel.appendChild(o); });
   const out = document.getElementById('pron-out');
   const start = document.getElementById('pron-start'); const stop = document.getElementById('pron-stop');
-  let rec=null;
+  const recAudio = document.getElementById('rec-play');
+  const deviceNote = document.getElementById('device-note');
+  const modeRadios = document.querySelectorAll('input[name="prmode"]');
+  let rec=null, mediaRec=null, chunks=[];
+
   function norm(s){ return (s||"").toLowerCase().replace(/[.,!?~、。！？·:;'"()\[\]{}ー-]/g,' ').replace(/\s+/g,' ').trim(); }
   function jamo(s){
     const CHO = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
@@ -238,135 +304,48 @@ function playWordAudio(word){
     const jamoSim = 1 - dp[ja.length][jb.length]/m;
     return Math.max((token*0.5 + jamoSim*0.5), jamoSim);
   }
-  start.addEventListener('click', ()=>{
+
+  function setDeviceNote(){
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if(!SR){ alert("このブラウザは音声認識に対応していません（Chrome系推奨）。"); return; }
-    rec = new SR(); rec.lang="ko-KR"; rec.interimResults=false; rec.maxAlternatives=1;
-    start.disabled=true; stop.disabled=true; out.textContent="録音中...";
-    const target = sel.value;
-    rec.onresult = e=>{ const said = e.results[0][0].transcript.trim(); const sc = sim(said, target); const judge = sc>=0.85? "✔ かなり良い": (sc>=0.7? "△ もう少し": "✘ 要練習"); out.innerHTML=`あなた: <b>${said}</b><br>目標: <b>${target}</b><br>一致度: <b>${(sc*100).toFixed(0)}%</b> ${judge}`; start.disabled=false; stop.disabled=true; };
-    rec.onerror = e=>{ out.textContent="音声認識エラー: "+e.error; start.disabled=false; stop.disabled=true; };
-    rec.onend = ()=>{ if(start.disabled){ start.disabled=false; stop.disabled=true; } };
-    rec.start();
-  });
-  stop.addEventListener('click', ()=>{ if(rec) rec.stop(); });
-})();
-
-// ---- Progress ----
-(function(){
-  function render(){
-    const p = JSON.parse(localStorage.getItem('coach_v42_prog')||'{}');
-    const box = document.getElementById('prog');
-    box.innerHTML = Object.entries(p).map(([k,v])=>`<div>${k}: <b>${v}</b></div>`).join('') || "<div class='note'>まだ記録はありません。</div>";
+    const ua = navigator.userAgent||"";
+    const isiOS = /iPhone|iPad|iPod/.test(ua);
+    deviceNote.textContent = SR? "評価モードが使えます。" : "この端末はWeb Speech未対応のため『録音のみ』をご利用ください。";
+    if(isiOS) deviceNote.textContent += "（iOS Safari/Chromeは音声認識非対応）";
   }
-  document.getElementById('prog-reset').addEventListener('click', ()=>{ localStorage.removeItem('coach_v42_prog'); render(); });
-  render();
-})();
+  setDeviceNote();
 
-// ---- AutoCut (Web Audio API: silence detection) ----
-(function(){
-  const aud = document.getElementById('ac-aud');
-  const thInput = document.getElementById('ac-th');
-  const thVal = document.getElementById('ac-thv');
-  const gapInput = document.getElementById('ac-gap');
-  const btnAnalyze = document.getElementById('ac-analyze');
-  const list = document.getElementById('ac-list');
-  const btnSave = document.getElementById('ac-save');
-  const inputImport = document.getElementById('ac-import');
-
-  thInput.addEventListener('input', ()=> thVal.textContent = thInput.value);
-
-  async function analyze(){
-    const url = 'audio/lesson_vocab_master.mp3';
-    list.innerHTML = "<div class='note'>解析中…</div>";
-    try{
-      const res = await fetch(url, {cache:'no-store'});
-      if(!res.ok) throw new Error('音声が見つかりません: '+url);
-      const buf = await res.arrayBuffer();
-      const ctx = new (window.AudioContext||window.webkitAudioContext)();
-      const audio = await ctx.decodeAudioData(buf);
-      const ch = audio.numberOfChannels>1? audio.getChannelData(0): audio.getChannelData(0);
-      const sr = audio.sampleRate;
-      // 短時間エネルギー
-      const win = Math.floor(sr*0.02); // 20ms
-      const hop = Math.floor(sr*0.01); // 10ms
-      const rms = [];
-      let i=0;
-      while(i+win <= ch.length){
-        let s=0;
-        for(let k=0;k<win;k++){ const v = ch[i+k]; s += v*v; }
-        rms.push(Math.sqrt(s/win));
-        i += hop;
+  start.addEventListener('click', async ()=>{
+    const mode = [...modeRadios].find(r=>r.checked).value;
+    if(mode==="sr"){
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if(!SR){ alert("この端末は評価モードが使えません。『録音のみ』に切り替えてください。"); return; }
+      rec = new SR(); rec.lang="ko-KR"; rec.interimResults=false; rec.maxAlternatives=1;
+      start.disabled=true; stop.disabled=true; out.textContent="録音中...";
+      const target = document.getElementById('pron-select').value;
+      rec.onresult = e=>{ const said = e.results[0][0].transcript.trim(); const sc = sim(said, target); const judge = sc>=0.85? "✔ かなり良い": (sc>=0.7? "△ もう少し": "✘ 要練習"); out.innerHTML=`あなた: <b>${said}</b><br>目標: <b>${target}</b><br>一致度: <b>${(sc*100).toFixed(0)}%</b> ${judge}`; start.disabled=false; stop.disabled=true; saveProg({"pron": sc>=0.7}); };
+      rec.onerror = e=>{ out.textContent="音声認識エラー: "+e.error; start.disabled=false; stop.disabled=true; };
+      rec.onend = ()=>{ if(start.disabled){ start.disabled=false; stop.disabled=true; } };
+      rec.start();
+    } else {
+      try{
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        const mediaRec = new MediaRecorder(stream);
+        const chunks=[]; mediaRec.ondataavailable = e=>{ if(e.data.size>0) chunks.push(e.data); };
+        mediaRec.onstop = ()=>{
+          const blob = new Blob(chunks, {type:'audio/webm'});
+          const url = URL.createObjectURL(blob);
+          const recAudio = document.getElementById('rec-play');
+          recAudio.src = url; recAudio.style.display = 'block'; out.textContent="録音の再生・保存ができます（評価は行いません）。";
+          saveProg({"pron": true});
+        };
+        mediaRec.start(); start.disabled=true; stop.disabled=false; out.textContent="録音中...（停止で保存）";
+        stop.onclick = ()=>{ if(mediaRec.state!=="inactive"){ mediaRec.stop(); start.disabled=false; stop.disabled=true; } };
+      }catch(err){
+        alert("マイクにアクセスできません: "+err.message);
       }
-      const th = parseFloat(thInput.value);
-      const minGapSec = Math.max(0.05, Math.min(1.5, (parseInt(gapInput.value)||250)/1000));
-      // 無音フラグ
-      const silent = rms.map(v=> v < th ? 1 : 0);
-      // サイレント→ボイストランジションで区切り候補
-      const cuts = [];
-      let prevVoice = false;
-      for(let idx=1; idx<silent.length; idx++){
-        const voice = !silent[idx];
-        if(voice && !prevVoice){ // 無音→発声
-          const t = idx*hop/sr;
-          if(cuts.length===0 || (t - cuts[cuts.length-1]) >= minGapSec){
-            cuts.push(t);
-          }
-        }
-        prevVoice = voice;
-      }
-      // 語彙数に合わせて区間を生成
-      const words = LESSON.vocab.map(v=>v.ko);
-      const cues = {};
-      for(let w=0; w<words.length; w++){
-        const start = cuts[w] ?? (w===0?0: (cues[words[w-1]].end + 0.4));
-        const end = (w+1<cuts.length? cuts[w+1] : (start+1.2));
-        cues[words[w]] = {start: Math.max(0, +(start.toFixed(2))), end: Math.max(0, +(end.toFixed(2)))};
-      }
-      VOCAB_CUES = {meta:{src:url}, cues};
-      renderList();
-    }catch(err){
-      list.innerHTML = "<div class='incorrect'>解析に失敗しました。"+err.message+"</div>";
     }
-  }
-
-  function renderList(){
-    list.innerHTML = "";
-    const words = LESSON.vocab.map(v=>v.ko);
-    words.forEach(w=>{
-      const c = VOCAB_CUES.cues[w] || {start:0, end:1};
-      const row = document.createElement('div'); row.className='ac-item';
-      row.innerHTML = `<div><b>${w}</b></div>
-        <div>開始 <input type="number" step="0.01" value="${c.start}" data-w="${w}" data-k="start" style="width:120px"></div>
-        <div>終了 <input type="number" step="0.01" value="${c.end}" data-w="${w}" data-k="end" style="width:120px"></div>
-        <div><button data-play="${w}" type="button">▶ 試聴</button></div>`;
-      list.appendChild(row);
-    });
-    list.addEventListener('input', e=>{
-      const inp = e.target;
-      if(inp.tagName==='INPUT' && inp.dataset.w){
-        const w = inp.dataset.w; const k = inp.dataset.k; const v = parseFloat(inp.value)||0;
-        VOCAB_CUES.cues[w] = VOCAB_CUES.cues[w]||{start:0, end:1};
-        VOCAB_CUES.cues[w][k] = v;
-      }
-    }, {once:true});
-    list.addEventListener('click', e=>{
-      const btn = e.target.closest('button[data-play]'); if(!btn) return;
-      const w = btn.dataset.play; const c = VOCAB_CUES.cues[w]; if(!c) return;
-      const a = new Audio(VOCAB_CUES.meta.src); a.currentTime = c.start||0;
-      a.play().then(()=>{
-        const stop = c.end||0; if(stop>c.start){ const id = setInterval(()=>{ if(a.currentTime>=stop){ a.pause(); clearInterval(id);} }, 50); }
-      }).catch(()=>{});
-    }, {once:true});
-  }
-
-  btnAnalyze.addEventListener('click', analyze);
-  btnSave.addEventListener('click', ()=>{
-    const blob = new Blob([JSON.stringify(VOCAB_CUES, null, 2)], {type:'application/json'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'vocab_cues.json'; a.click();
-  });
-  inputImport.addEventListener('change', ()=>{
-    const f = inputImport.files && inputImport.files[0]; if(!f) return;
-    const r = new FileReader(); r.onload = ()=>{ try{ VOCAB_CUES = JSON.parse(r.result); renderList(); }catch(e){ alert('JSON読み込みに失敗:'+e.message); } }; r.readAsText(f);
   });
 })();
+
+// ---- Progress initial render ----
+renderProg();

@@ -17,9 +17,6 @@ main{max-width:980px; margin:0 auto; padding:16px}
 .shadow-text{padding:8px; border:1px solid #eee; border-radius:8px; background:#fff; line-height:1.8; margin-top:8px}
 /* Falling game */
 #fall-area{position:relative; height:320px; border:1px solid #e1e1ee; border-radius:12px; overflow:hidden; background:linear-gradient(180deg,#fafafe,#f0f4ff)}
-.fall{position:absolute; padding:6px 10px; background:#fff; border:1px solid #cfd7ff; border-radius:999px; animation:fall linear var(--dur,6s); white-space:nowrap; cursor:pointer; user-select:none}
+.fall{position:absolute; padding:8px 12px; background:#fff; border:1px solid #cfd7ff; border-radius:12px; animation:fall linear var(--dur,6s); white-space:nowrap; cursor:pointer; user-select:none; font-size:18px}
 @keyframes fall{0%{transform:translateY(-40px);}100%{transform:translateY(360px);}}
 .hud{display:flex; gap:10px; justify-content:space-between; margin-top:6px}
-/* AutoCut list */
-.ac-item{display:grid; grid-template-columns: 1fr 150px 150px 90px; gap:8px; align-items:center; padding:6px 8px; border-bottom:1px solid #f0f0f5}
-.ac-item button{padding:6px 8px}
